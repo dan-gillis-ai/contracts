@@ -278,3 +278,12 @@ message RunTokenClaims {
   int64 expires_unix_ms = 5;
   string approval_mode = 6;         // ask | auto | never
 }
+
+// The device tunnel. Exactly one service on the wire, one bidirectional stream
+// per device. The device dials out (ADR-0002): the cluster never opens a
+// connection toward a device, so this service is only ever a server.
+service DeviceTunnel {
+  // Connect authenticates via mTLS client cert at the transport layer, then
+  // multiplexes every logical channel over the single returned stream.
+  rpc Connect(stream DeviceEnvelope) returns (stream DeviceEnvelope);
+}

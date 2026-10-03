@@ -2148,7 +2148,9 @@ const file_agentharness_v1_agentharness_proto_rawDesc = "" +
 	"\x1aCAPABILITY_DECISION_DENIED\x10\x02\x12)\n" +
 	"%CAPABILITY_DECISION_AWAITING_APPROVAL\x10\x03\x12\x1e\n" +
 	"\x1aCAPABILITY_DECISION_FAILED\x10\x04\x12 \n" +
-	"\x1cCAPABILITY_DECISION_REPLAYED\x10\x05BFZDgithub.com/agent-harness/contracts/gen/agentharnessv1;agentharnessv1b\x06proto3"
+	"\x1cCAPABILITY_DECISION_REPLAYED\x10\x052_\n" +
+	"\fDeviceTunnel\x12O\n" +
+	"\aConnect\x12\x1f.agentharness.v1.DeviceEnvelope\x1a\x1f.agentharness.v1.DeviceEnvelope(\x010\x01BFZDgithub.com/agent-harness/contracts/gen/agentharnessv1;agentharnessv1b\x06proto3"
 
 var (
 	file_agentharness_v1_agentharness_proto_rawDescOnce sync.Once
@@ -2222,8 +2224,10 @@ var file_agentharness_v1_agentharness_proto_depIdxs = []int32{
 	23, // 28: agentharness.v1.DialSpec.min_value:type_name -> google.protobuf.Value
 	23, // 29: agentharness.v1.DialSpec.max_value:type_name -> google.protobuf.Value
 	4,  // 30: agentharness.v1.RunTokenClaims.capabilities:type_name -> agentharness.v1.Capability
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
+	9,  // 31: agentharness.v1.DeviceTunnel.Connect:input_type -> agentharness.v1.DeviceEnvelope
+	9,  // 32: agentharness.v1.DeviceTunnel.Connect:output_type -> agentharness.v1.DeviceEnvelope
+	32, // [32:33] is the sub-list for method output_type
+	31, // [31:32] is the sub-list for method input_type
 	31, // [31:31] is the sub-list for extension type_name
 	31, // [31:31] is the sub-list for extension extendee
 	0,  // [0:31] is the sub-list for field type_name
@@ -2255,7 +2259,7 @@ func file_agentharness_v1_agentharness_proto_init() {
 			NumEnums:      6,
 			NumMessages:   16,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_agentharness_v1_agentharness_proto_goTypes,
 		DependencyIndexes: file_agentharness_v1_agentharness_proto_depIdxs,
