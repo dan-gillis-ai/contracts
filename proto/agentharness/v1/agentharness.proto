@@ -1,0 +1,280 @@
+// Agent Harness wire contract, v1.
+//
+// Single source of truth for every cross-boundary message in the system. The
+// Go and Python implementations both generate from this file; the shared taint
+// vectors in libs/taint/vectors.json are the conformance oracle for the enum
+// values defined here.
+//
+// Design rules:
+//   - Every message that crosses a trust boundary carries taint explicitly.
+//     Nothing defaults to trusted; an unset taint must be treated as hostile.
+//   - Every capability request carries an idempotency key. At-least-once
+//     delivery is the norm (LangGraph replays), so deduplication is mandatory.
+//   - Timestamps are Unix milliseconds to keep JS and Swift consumers happy.
+syntax = "proto3";
+
+package agentharness.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/agent-harness/contracts/gen/agentharnessv1;agentharnessv1";
+
+// Trust-lattice position. Mirrors libs/taint exactly: Trusted < Semi <
+// Untrusted < Hostile. The wire values are frozen — changing them invalidates
+// every persisted taint label.
+enum TaintLevel {
+  TAINT_LEVEL_UNSPECIFIED = 0;  // treat as HOSTILE; never treat as trusted
+  TAINT_LEVEL_TRUSTED = 1;      // operator-authored config, curated docs
+  TAINT_LEVEL_SEMI = 2;         // model output, git diffs, user-typed input, local files
+  TAINT_LEVEL_UNTRUSTED = 3;    // web fetches, third-party MCP servers, unknown repos
+  TAINT_LEVEL_HOSTILE = 4;      // blocklisted sources, redaction-flagged content
+}
+
+// Attributed taint provenance. The origins are rendered verbatim in approval
+// prompts, so they must be human-readable ("https://...", "model.generation").
+message TaintSources {
+  TaintLevel level = 1;
+  repeated string origins = 2;
+}
+
+// Lifecycle of a run. `status_detail` carries the finer-grained reason
+// (waiting_for_approval, device_suspended, out_of_budget, ...).
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_QUEUED = 1;
+  RUN_STATUS_RUNNING = 2;
+  RUN_STATUS_WAITING = 3;      // waiting on human or device
+  RUN_STATUS_PAUSED = 4;       // checkpointed, resumable
+  RUN_STATUS_COMPLETED = 5;
+  RUN_STATUS_FAILED = 6;
+  RUN_STATUS_CANCELLED = 7;
+}
+
+// Why a run is in WAITING/PAUSED. Consumed by the UI to render state and by
+// graph-runtime to decide resume semantics.
+enum RunStatusDetail {
+  RUN_STATUS_DETAIL_UNSPECIFIED = 0;
+  RUN_STATUS_DETAIL_WORKING = 1;
+  RUN_STATUS_DETAIL_WAITING_FOR_USER = 2;
+  RUN_STATUS_DETAIL_WAITING_FOR_APPROVAL = 3;
+  RUN_STATUS_DETAIL_DEVICE_SUSPENDED = 4;
+  RUN_STATUS_DETAIL_BUDGET_EXHAUSTED = 5;
+  RUN_STATUS_DETAIL_STEP_LIMIT = 6;
+  RUN_STATUS_DETAIL_PROVIDER_ERROR = 7;
+  RUN_STATUS_DETAIL_COMPACTED = 8;
+}
+
+// Device health, published on every heartbeat.
+enum DeviceState {
+  DEVICE_STATE_UNSPECIFIED = 0;
+  DEVICE_STATE_READY = 1;
+  DEVICE_STATE_BUSY = 2;         // at concurrency cap
+  DEVICE_STATE_DEGRADED = 3;     // some capabilities unavailable (e.g. TCC revoked)
+  DEVICE_STATE_SUSPENDED = 4;    // machine asleep; stream down
+}
+
+// The capability catalogue. Typed operations only — there is deliberately no
+// "run arbitrary code" capability. Ceilings live in the policy library, not on
+// the wire, so they can be tightened without a wire release.
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  // Read-only filesystem (ceiling: untrusted)
+  CAPABILITY_FS_READ = 1;
+  CAPABILITY_FS_LIST = 2;
+  CAPABILITY_FS_SEARCH = 3;
+  // Mutating filesystem (ceiling: semi; outside workspace roots = hard deny)
+  CAPABILITY_FS_WRITE = 4;
+  CAPABILITY_FS_DELETE = 5;
+  // Git read-only (ceiling: untrusted)
+  CAPABILITY_GIT_STATUS = 6;
+  CAPABILITY_GIT_LOG = 7;
+  CAPABILITY_GIT_DIFF = 8;
+  // Git mutating (ceiling: semi; approval required)
+  CAPABILITY_GIT_COMMIT = 9;
+  CAPABILITY_GIT_PUSH = 10;
+  // Process execution (ceiling: semi; argv-shape allowlist)
+  CAPABILITY_SHELL_RUN = 11;
+  CAPABILITY_SHELL_TEST = 12;
+  // Screen + accessibility (ceiling: untrusted for read, semi for actuation)
+  CAPABILITY_SCREEN_CAPTURE = 13;
+  CAPABILITY_AX_TREE = 14;
+  CAPABILITY_AX_CLICK = 15;
+  CAPABILITY_AX_TYPE = 16;
+  CAPABILITY_AX_FOCUS = 17;
+  // Network via egress proxy (ceiling: n/a — output is untrusted by definition)
+  CAPABILITY_NET_FETCH = 18;
+  // Tool invocation through the MCP gateway
+  CAPABILITY_MCP_INVOKE = 19;
+  // Sandbox lifecycle
+  CAPABILITY_SANDBOX_EXECUTE = 20;
+  // Device introspection
+  CAPABILITY_DEVICE_STATE = 21;
+}
+
+// What happened on a capability decision. Denials are first-class: they are the
+// most valuable audit records during an incident.
+enum CapabilityDecision {
+  CAPABILITY_DECISION_UNSPECIFIED = 0;
+  CAPABILITY_DECISION_ALLOWED = 1;
+  CAPABILITY_DECISION_DENIED = 2;       // policy/scope/taint rejection
+  CAPABILITY_DECISION_AWAITING_APPROVAL = 3;
+  CAPABILITY_DECISION_FAILED = 4;       // allowed but execution errored
+  CAPABILITY_DECISION_REPLAYED = 5;     // served from the journal, not re-executed
+}
+
+message CapabilityRequest {
+  string run_id = 1;
+  string tenant_id = 2;
+  string run_token = 3;          // HMAC capability token; 5-minute TTL
+  Capability capability = 4;
+  google.protobuf.Struct args = 5;
+  TaintSources input_taint = 6;  // join of everything this call was derived from
+  string idempotency_key = 7;    // (run_id, node_id, attempt_digest); REQUIRED
+  string node_id = 8;
+  string traceparent = 9;        // W3C trace context, propagated end to end
+  bytes dials_digest = 10;       // device-side policy digest this call assumed
+}
+
+message CapabilityResult {
+  string idempotency_key = 1;
+  CapabilityDecision decision = 2;
+  string denial_reason = 3;      // human-readable; empty unless denied/failed
+  google.protobuf.Struct result = 4;
+  TaintSources result_taint = 5; // effective ceiling of the capability, min. input
+  int64 duration_ms = 6;
+  string journal_seq = 7;        // device journal position for this execution
+  string error_code = 8;         // machine-readable failure class
+}
+
+// One mTLS stream, many channels. Channel IDs make resumption and interleaving
+// unambiguous; a reconnect replays journal entries after the last acked seq.
+message DeviceEnvelope {
+  uint64 seq = 1;                // monotonic per stream
+  oneof body {
+    Heartbeat heartbeat = 2;
+    CapabilityRequest cap_request = 3;
+    CapabilityResult cap_result = 4;
+    CapabilityStreamChunk cap_stream = 5;
+    JournalRecord journal = 6;
+    ControlMessage control = 7;
+  }
+}
+
+message Heartbeat {
+  string device_id = 1;
+  DeviceState state = 2;
+  repeated Capability capabilities = 3;  // currently available manifest
+  int64 unix_ms = 4;
+  string agent_version = 5;
+}
+
+// Incremental output for long-running capabilities (shell.run, sandbox exec).
+message CapabilityStreamChunk {
+  string idempotency_key = 1;
+  uint64 chunk_index = 2;
+  bytes data = 3;
+  bool is_stderr = 4;
+  bool final = 5;
+}
+
+// Device-local, hash-chained record of every capability execution. Reconciled
+// into the cluster audit chain on reconnect, so a compromised cluster cannot
+// retroactively alter the device's view of what it did.
+message JournalRecord {
+  uint64 seq = 1;
+  string prev_hash = 2;       // hex sha256 of the previous record
+  string entry_hash = 3;      // hex sha256(prev_hash || canonical(entry))
+  CapabilityRequest request = 4;
+  CapabilityResult result = 5;
+  int64 unix_ms = 6;
+}
+
+// Cluster → device control. Policy widening requires a signed push; the device
+// never accepts an unsigned widening.
+message ControlMessage {
+  oneof body {
+    PolicyUpdate policy_update = 1;
+    DialUpdate dial_update = 2;
+    CancelRequest cancel = 3;
+  }
+}
+
+message PolicyUpdate {
+  bytes policy_digest = 1;          // must match what device already has
+  string signature = 2;             // detached signature over policy_digest
+  google.protobuf.Struct policy = 3;  // workspace roots, ceilings, allowlists
+}
+
+message DialUpdate {
+  string run_id = 1;
+  string key = 2;
+  google.protobuf.Value value = 3;
+  uint64 base_version = 4;          // optimistic concurrency
+}
+
+message CancelRequest { string run_id = 1; }
+
+// Event-bus envelope. Subject naming: t.{tenant_id}.runs.{run_id}.{event}
+message EventEnvelope {
+  string id = 1;                    // ULID
+  string tenant_id = 2;
+  string run_id = 3;
+  string type = 4;                  // e.g. "run.started", "node.completed", "token.delta"
+  int64 unix_ms = 5;
+  string traceparent = 6;
+  uint64 seq = 7;                   // per-run sequence, ordered by consumer
+  RunStatus status = 8;             // set when type changes run state
+  google.protobuf.Struct payload = 9;
+}
+
+// Human-in-the-loop item. Rendered args and taint provenance are mandatory —
+// an approval prompt that shows only a tool name is the vulnerability.
+message ApprovalItem {
+  string id = 1;
+  string tenant_id = 2;
+  string run_id = 3;
+  string node_id = 4;
+  Capability capability = 5;
+  google.protobuf.Struct rendered_args = 6;
+  TaintSources input_taint = 7;
+  string requested_at_unix_ms = 8;  // string to keep JS precise; ms precision
+  int32 ttl_seconds = 9;            // after this, default-deny
+  string resume_token = 10;         // opaque; ties decision back to the graph
+}
+
+message ApprovalDecision {
+  string id = 1;
+  bool approved = 2;
+  string decided_by = 3;            // user identity (from re-auth)
+  string method = 4;                // "touch_id" | "passcode" | "password"
+  int64 decided_at_unix_ms = 5;
+  string reason = 6;                // optional, recorded in the audit chain
+}
+
+// A dial, as declared in a signed graph artifact and rendered by the UI.
+message DialSpec {
+  string key = 1;
+  string type = 2;                  // number|int|bool|enum|string|duration|bytes|percent
+  google.protobuf.Value default_value = 3;
+  string mutability = 4;            // live|startup|immutable
+  string scope = 5;                 // graph|tenant|run
+  google.protobuf.Value min_value = 6;
+  google.protobuf.Value max_value = 7;
+  repeated string enum_values = 8;
+  string unit = 9;
+  string label = 10;
+  string description = 11;
+  bool requires_approval = 12;      // privilege-widening dials
+  repeated string affects = 13;     // node ids whose behaviour changes
+}
+
+// A run token's *claims* — the token itself is HMAC'd server-side. The device
+// agent verifies signature + TTL + run binding + capability membership.
+message RunTokenClaims {
+  string run_id = 1;
+  string tenant_id = 2;
+  string graph_digest = 3;
+  repeated Capability capabilities = 4;
+  int64 expires_unix_ms = 5;
+  string approval_mode = 6;         // ask | auto | never
+}
