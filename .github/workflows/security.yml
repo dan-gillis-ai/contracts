@@ -3,6 +3,11 @@
 # Copied from dan-gllis-ai/platform-gitops-workflows by reconcile.py. Drift is corrected on the nightly
 # reconcile, so a local edit will be reverted.
 # Fix the pipeline in the library, then reconcile.
+# Managed by dan-gillis-ai/platform-gitops — DO NOT EDIT IN PLACE.
+#
+# Copied from dan-gllis-ai/platform-gitops-workflows by reconcile.py. Drift is corrected on the nightly
+# reconcile, so a local edit will be reverted.
+# Fix the pipeline in the library, then reconcile.
 name: Security
 'on':
   push:
