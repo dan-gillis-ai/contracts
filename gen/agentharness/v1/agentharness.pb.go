@@ -2171,7 +2171,7 @@ const file_agentharness_v1_agentharness_proto_rawDesc = "" +
 	"\x1aCAPABILITY_DECISION_FAILED\x10\x04\x12 \n" +
 	"\x1cCAPABILITY_DECISION_REPLAYED\x10\x052_\n" +
 	"\fDeviceTunnel\x12O\n" +
-	"\aConnect\x12\x1f.agentharness.v1.DeviceEnvelope\x1a\x1f.agentharness.v1.DeviceEnvelope(\x010\x01BFZDgithub.com/agent-harness/contracts/gen/agentharnessv1;agentharnessv1b\x06proto3"
+	"\aConnect\x12\x1f.agentharness.v1.DeviceEnvelope\x1a\x1f.agentharness.v1.DeviceEnvelope(\x010\x01BFZDgithub.com/dan-gillis-ai/contracts/gen/agentharnessv1;agentharnessv1b\x06proto3"
 
 var (
 	file_agentharness_v1_agentharness_proto_rawDescOnce sync.Once

@@ -1,4 +1,4 @@
-module github.com/agent-harness/contracts/gen
+module github.com/dan-gillis-ai/contracts/gen
 
 go 1.25.0
 

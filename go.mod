@@ -1,5 +1,5 @@
-module github.com/agent-harness/contracts
+module github.com/dan-gillis-ai/contracts
 
 go 1.27
 
-replace github.com/agent-harness/contracts/gen => ./gen
+replace github.com/dan-gillis-ai/contracts/gen => ./gen
