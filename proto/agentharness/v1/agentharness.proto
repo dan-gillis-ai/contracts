@@ -225,6 +225,18 @@ message EventEnvelope {
   uint64 seq = 7;                   // per-run sequence, ordered by consumer
   RunStatus status = 8;             // set when type changes run state
   google.protobuf.Struct payload = 9;
+  // The finer-grained reason behind `status` — the first-class carrier for
+  // RunStatusDetail. It belongs here, not inside `payload`: consumers must
+  // not have to parse free-text payload fields to learn why a run is
+  // WAITING or PAUSED (waiting_for_approval, device_suspended,
+  // out_of_budget, …). UNSPECIFIED means "no reason asserted" — the enum's
+  // own doc comment says everything not named must be treated as hostile,
+  // which is why this is additive and never replaces `status`.
+  //
+  // Field 10 is the next free number; 1-9 are taken above and are frozen.
+  // Never reuse or renumber an existing field — that breaks wire compat for
+  // every producer and consumer already deployed.
+  RunStatusDetail status_detail = 10;
 }
 
 // Human-in-the-loop item. Rendered args and taint provenance are mandatory —

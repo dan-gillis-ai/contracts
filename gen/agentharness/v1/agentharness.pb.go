@@ -1404,16 +1404,28 @@ func (x *CancelRequest) GetRunId() string {
 
 // Event-bus envelope. Subject naming: t.{tenant_id}.runs.{run_id}.{event}
 type EventEnvelope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ULID
-	TenantId      string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // e.g. "run.started", "node.completed", "token.delta"
-	UnixMs        int64                  `protobuf:"varint,5,opt,name=unix_ms,json=unixMs,proto3" json:"unix_ms,omitempty"`
-	Traceparent   string                 `protobuf:"bytes,6,opt,name=traceparent,proto3" json:"traceparent,omitempty"`
-	Seq           uint64                 `protobuf:"varint,7,opt,name=seq,proto3" json:"seq,omitempty"`                                      // per-run sequence, ordered by consumer
-	Status        RunStatus              `protobuf:"varint,8,opt,name=status,proto3,enum=agentharness.v1.RunStatus" json:"status,omitempty"` // set when type changes run state
-	Payload       *structpb.Struct       `protobuf:"bytes,9,opt,name=payload,proto3" json:"payload,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ULID
+	TenantId    string                 `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	RunId       string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Type        string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"` // e.g. "run.started", "node.completed", "token.delta"
+	UnixMs      int64                  `protobuf:"varint,5,opt,name=unix_ms,json=unixMs,proto3" json:"unix_ms,omitempty"`
+	Traceparent string                 `protobuf:"bytes,6,opt,name=traceparent,proto3" json:"traceparent,omitempty"`
+	Seq         uint64                 `protobuf:"varint,7,opt,name=seq,proto3" json:"seq,omitempty"`                                      // per-run sequence, ordered by consumer
+	Status      RunStatus              `protobuf:"varint,8,opt,name=status,proto3,enum=agentharness.v1.RunStatus" json:"status,omitempty"` // set when type changes run state
+	Payload     *structpb.Struct       `protobuf:"bytes,9,opt,name=payload,proto3" json:"payload,omitempty"`
+	// The finer-grained reason behind `status` — the first-class carrier for
+	// RunStatusDetail. It belongs here, not inside `payload`: consumers must
+	// not have to parse free-text payload fields to learn why a run is
+	// WAITING or PAUSED (waiting_for_approval, device_suspended,
+	// out_of_budget, …). UNSPECIFIED means "no reason asserted" — the enum's
+	// own doc comment says everything not named must be treated as hostile,
+	// which is why this is additive and never replaces `status`.
+	//
+	// Field 10 is the next free number; 1-9 are taken above and are frozen.
+	// Never reuse or renumber an existing field — that breaks wire compat for
+	// every producer and consumer already deployed.
+	StatusDetail  RunStatusDetail `protobuf:"varint,10,opt,name=status_detail,json=statusDetail,proto3,enum=agentharness.v1.RunStatusDetail" json:"status_detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1509,6 +1521,13 @@ func (x *EventEnvelope) GetPayload() *structpb.Struct {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *EventEnvelope) GetStatusDetail() RunStatusDetail {
+	if x != nil {
+		return x.StatusDetail
+	}
+	return RunStatusDetail_RUN_STATUS_DETAIL_UNSPECIFIED
 }
 
 // Human-in-the-loop item. Rendered args and taint provenance are mandatory —
@@ -2025,7 +2044,7 @@ const file_agentharness_v1_agentharness_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x05value\x12!\n" +
 	"\fbase_version\x18\x04 \x01(\x04R\vbaseVersion\"&\n" +
 	"\rCancelRequest\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\x9b\x02\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xe2\x02\n" +
 	"\rEventEnvelope\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x15\n" +
@@ -2035,7 +2054,9 @@ const file_agentharness_v1_agentharness_proto_rawDesc = "" +
 	"\vtraceparent\x18\x06 \x01(\tR\vtraceparent\x12\x10\n" +
 	"\x03seq\x18\a \x01(\x04R\x03seq\x122\n" +
 	"\x06status\x18\b \x01(\x0e2\x1a.agentharness.v1.RunStatusR\x06status\x121\n" +
-	"\apayload\x18\t \x01(\v2\x17.google.protobuf.StructR\apayload\"\x9b\x03\n" +
+	"\apayload\x18\t \x01(\v2\x17.google.protobuf.StructR\apayload\x12E\n" +
+	"\rstatus_detail\x18\n" +
+	" \x01(\x0e2 .agentharness.v1.RunStatusDetailR\fstatusDetail\"\x9b\x03\n" +
 	"\fApprovalItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x15\n" +
@@ -2217,20 +2238,21 @@ var file_agentharness_v1_agentharness_proto_depIdxs = []int32{
 	23, // 21: agentharness.v1.DialUpdate.value:type_name -> google.protobuf.Value
 	1,  // 22: agentharness.v1.EventEnvelope.status:type_name -> agentharness.v1.RunStatus
 	22, // 23: agentharness.v1.EventEnvelope.payload:type_name -> google.protobuf.Struct
-	4,  // 24: agentharness.v1.ApprovalItem.capability:type_name -> agentharness.v1.Capability
-	22, // 25: agentharness.v1.ApprovalItem.rendered_args:type_name -> google.protobuf.Struct
-	6,  // 26: agentharness.v1.ApprovalItem.input_taint:type_name -> agentharness.v1.TaintSources
-	23, // 27: agentharness.v1.DialSpec.default_value:type_name -> google.protobuf.Value
-	23, // 28: agentharness.v1.DialSpec.min_value:type_name -> google.protobuf.Value
-	23, // 29: agentharness.v1.DialSpec.max_value:type_name -> google.protobuf.Value
-	4,  // 30: agentharness.v1.RunTokenClaims.capabilities:type_name -> agentharness.v1.Capability
-	9,  // 31: agentharness.v1.DeviceTunnel.Connect:input_type -> agentharness.v1.DeviceEnvelope
-	9,  // 32: agentharness.v1.DeviceTunnel.Connect:output_type -> agentharness.v1.DeviceEnvelope
-	32, // [32:33] is the sub-list for method output_type
-	31, // [31:32] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	2,  // 24: agentharness.v1.EventEnvelope.status_detail:type_name -> agentharness.v1.RunStatusDetail
+	4,  // 25: agentharness.v1.ApprovalItem.capability:type_name -> agentharness.v1.Capability
+	22, // 26: agentharness.v1.ApprovalItem.rendered_args:type_name -> google.protobuf.Struct
+	6,  // 27: agentharness.v1.ApprovalItem.input_taint:type_name -> agentharness.v1.TaintSources
+	23, // 28: agentharness.v1.DialSpec.default_value:type_name -> google.protobuf.Value
+	23, // 29: agentharness.v1.DialSpec.min_value:type_name -> google.protobuf.Value
+	23, // 30: agentharness.v1.DialSpec.max_value:type_name -> google.protobuf.Value
+	4,  // 31: agentharness.v1.RunTokenClaims.capabilities:type_name -> agentharness.v1.Capability
+	9,  // 32: agentharness.v1.DeviceTunnel.Connect:input_type -> agentharness.v1.DeviceEnvelope
+	9,  // 33: agentharness.v1.DeviceTunnel.Connect:output_type -> agentharness.v1.DeviceEnvelope
+	33, // [33:34] is the sub-list for method output_type
+	32, // [32:33] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_agentharness_v1_agentharness_proto_init() }
