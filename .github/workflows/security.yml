@@ -60,4 +60,3 @@ jobs:
         \ inherits the default token\"\n    bad=1\n  fi\ndone\n# Advisory only: this\
         \ warns rather than blocks, because adopting\n# explicit permissions is incremental\
         \ and failing every repo on\n# day one helps nobody.\nexit 0"
-# ci: verify current workflow definitions
